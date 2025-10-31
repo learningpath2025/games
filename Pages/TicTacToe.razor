@@ -1,0 +1,212 @@
+﻿@page "/tic-tac-toe"
+@using System.Linq
+
+<PageTitle>Tic Tac Toe</PageTitle>
+
+<h3>Tic-Tac-Toe vs Perfect Computer 🤖</h3>
+
+@if (!gameStarted)
+{
+    <div class="mode-select">
+        <p>Select your side:</p>
+            <button class="mode" @onclick="@(() => StartGame("X"))">Play as X (First)</button>
+            <button class="mode" @onclick="@(() => StartGame("O"))">Play as O (Second)</button>
+    </div>
+}
+else
+{
+    <div class="grid">
+        @for (int i = 0; i < Board.Length; i++)
+        {
+            int cellIndex = i;
+            bool isWinningCell = WinningCells.Contains(cellIndex);
+            string cellClass = isWinningCell ? "cell win" : "cell";
+
+            <button class="@cellClass"
+                    @onclick="() => MakeMove(cellIndex)"
+                    disabled="@gameOver">
+                @Board[cellIndex]
+            </button>
+        }
+    </div>
+
+    <p>@Status</p>
+
+    <button class="reset" @onclick="ResetGame">Restart</button>
+}
+
+@code {
+    private string[] Board = new string[9];
+    private bool isPlayerTurn = true;
+    private bool gameOver = false;
+    private bool gameStarted = false;
+    private string playerSymbol = "X";
+    private string aiSymbol = "O";
+    private string Status = "";
+    private List<int> WinningCells = new();
+
+    private void StartGame(string chosenSymbol)
+    {
+        playerSymbol = chosenSymbol;
+        aiSymbol = chosenSymbol == "X" ? "O" : "X";
+        isPlayerTurn = playerSymbol == "X";
+        gameStarted = true;
+        gameOver = false;
+        Status = isPlayerTurn ? "Your move!" : "Computer starts...";
+
+        if (!isPlayerTurn)
+        {
+            // If AI starts, make its move immediately
+            MakeBestComputerMove();
+        }
+    }
+
+    private void MakeMove(int index)
+    {
+        if (index < 0 || index >= Board.Length)
+            return;
+
+        if (gameOver || !isPlayerTurn || !string.IsNullOrEmpty(Board[index]))
+            return;
+
+        Board[index] = playerSymbol;
+        isPlayerTurn = false;
+
+        var winner = CheckWinner(null, out var winCombo);
+        if (HandleEndGameIfNeeded(winner, winCombo))
+            return;
+
+        InvokeAsync(StateHasChanged);
+
+        MakeBestComputerMove();
+    }
+
+    private void MakeBestComputerMove()
+    {
+        int bestMove = -1;
+        int bestScore = int.MinValue;
+
+        for (int i = 0; i < 9; i++)
+        {
+            if (string.IsNullOrEmpty(Board[i]))
+            {
+                Board[i] = aiSymbol;
+                int score = Minimax(Board, false);
+                Board[i] = null;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestMove = i;
+                }
+            }
+        }
+
+        if (bestMove != -1)
+        {
+            Board[bestMove] = aiSymbol;
+        }
+
+        var winner = CheckWinner(null, out var winCombo);
+        if (HandleEndGameIfNeeded(winner, winCombo))
+            return;
+
+        isPlayerTurn = true;
+        Status = "Your move!";
+    }
+
+
+    private int Minimax(string[] board, bool isMaximizing)
+    {
+        var winner = CheckWinner(board, out _);
+        if (winner == aiSymbol) return 1;
+        if (winner == playerSymbol) return -1;
+        if (board.All(b => !string.IsNullOrEmpty(b))) return 0;
+
+        if (isMaximizing)
+        {
+            int bestScore = int.MinValue;
+            for (int i = 0; i < 9; i++)
+            {
+                if (string.IsNullOrEmpty(board[i]))
+                {
+                    board[i] = aiSymbol;
+                    int score = Minimax(board, false);
+                    board[i] = null;
+                    bestScore = Math.Max(bestScore, score);
+                }
+            }
+            return bestScore;
+        }
+        else
+        {
+            int bestScore = int.MaxValue;
+            for (int i = 0; i < 9; i++)
+            {
+                if (string.IsNullOrEmpty(board[i]))
+                {
+                    board[i] = playerSymbol;
+                    int score = Minimax(board, true);
+                    board[i] = null;
+                    bestScore = Math.Min(bestScore, score);
+                }
+            }
+            return bestScore;
+        }
+    }
+
+    private string CheckWinner(string[]? customBoard, out List<int> winCombo)
+    {
+        var b = customBoard ?? Board;
+        int[][] wins =
+        {
+            new[]{0,1,2}, new[]{3,4,5}, new[]{6,7,8},
+            new[]{0,3,6}, new[]{1,4,7}, new[]{2,5,8},
+            new[]{0,4,8}, new[]{2,4,6}
+        };
+
+        foreach (var w in wins)
+        {
+            if (!string.IsNullOrEmpty(b[w[0]]) &&
+                b[w[0]] == b[w[1]] &&
+                b[w[1]] == b[w[2]])
+            {
+                winCombo = w.ToList();
+                return b[w[0]];
+            }
+        }
+
+        winCombo = new();
+        return null;
+    }
+
+    private bool HandleEndGameIfNeeded(string winner, List<int> winCombo)
+    {
+        if (winner != null)
+        {
+            Status = winner == playerSymbol ? "🎉 You win!" : "💻 Computer wins!";
+            gameOver = true;
+            WinningCells = winCombo;
+            return true;
+        }
+
+        if (Board.All(b => !string.IsNullOrEmpty(b)))
+        {
+            Status = "🤝 It's a draw!";
+            gameOver = true;
+            return true;
+        }
+
+        WinningCells.Clear();
+        return false;
+    }
+
+    private void ResetGame()
+    {
+        Board = new string[9];
+        WinningCells.Clear();
+        gameStarted = false;
+        gameOver = false;
+        Status = "";
+    }
+}

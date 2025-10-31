@@ -1,0 +1,59 @@
+﻿@page "/guess"
+@using System
+
+<PageTitle>Guess Number</PageTitle>
+
+<h3>🎯 Guess the Number Game</h3>
+
+<p>I'm thinking of a number between 1 and 100.</p>
+
+@if (!gameOver)
+{
+    <p>Enter your guess:</p>
+    <input type="number" @bind="userGuess" />
+    <button @onclick="CheckGuess">Guess!</button>
+
+    <p>@message</p>
+}
+else
+{
+    <p>🎉 Correct! The number was @numberToGuess.</p>
+    <p>You got it in @attempts tries.</p>
+    <button @onclick="RestartGame">Play Again</button>
+}
+
+@code {
+    private int numberToGuess;
+    private int userGuess;
+    private int attempts;
+    private bool gameOver = false;
+    private string message = "";
+
+    protected override void OnInitialized()
+    {
+        var random = new Random();
+        numberToGuess = random.Next(1, 101);
+    }
+
+    private void CheckGuess()
+    {
+        attempts++;
+        if (userGuess > numberToGuess)
+            message = "Too high! Try again.";
+        else if (userGuess < numberToGuess)
+            message = "Too low! Try again.";
+        else
+            gameOver = true;
+    }
+
+    private void RestartGame()
+    {
+        var random = new Random();
+        numberToGuess = random.Next(1, 101);
+        userGuess = 0;
+        attempts = 0;
+        gameOver = false;
+        message = "";
+    }
+}
+

@@ -1,0 +1,182 @@
+﻿@page "/ultimate-arcade"
+@inject IJSRuntime JS
+
+<PageTitle>Ultimate Arcade</PageTitle>
+
+<h3>🎮 Ultimate Arcade!</h3>
+<p>Time: @TimeLeft s | Score: @Score | Combo: x@ComboMultiplier | Level: @Level | High Score: @HighScore</p>
+
+<div class="grid" style="grid-template-columns: repeat(@GridSize, 80px);">
+    @for (int i = 0; i < GridSize * GridSize; i++)
+    {
+        int index = i;
+        var circle = ActiveCircles.FirstOrDefault(c => c.Position == index);
+        <div class="cell @(circle != null ? "circle " + circle.Color : "") @(circle != null ? "bounce" : "") @(circle != null && HitCircles.Contains(circle) ? "hit" : "")"
+             @onclick="() => Catch(circle)">
+            @(circle != null ? "⚪" : "")
+        </div>
+    }
+</div>
+
+@foreach(var p in Particles)
+{
+    <div class="particle" style="--dx:@(p.Dx)px; --dy:@(p.Dy)px; left:@(p.X*80)px; top:@(p.Y*80)px;"></div>
+}
+
+@if (ShowLevelUp)
+{
+    <div class="level-up-overlay">
+        <h1>Level @Level!</h1>
+    </div>
+}
+
+@if (GameOver)
+{
+    <p>⏱ Time's up! Final Score: @Score</p>
+    <button class="reset" @onclick="StartGame">Play Again</button>
+}
+
+@code {
+    private class Circle
+    {
+        public int Position { get; set; }
+        public string Color { get; set; } = "yellow";
+        public int Points { get; set; } = 1;
+        public bool IsPowerUp { get; set; } = false;
+    }
+
+    private class Particle { public int X,Y,Dx,Dy; }
+
+    private List<Circle> ActiveCircles = new();
+    private List<Circle> HitCircles = new();
+    private List<Particle> Particles = new();
+    private int Score, TimeLeft = 30, Level = 1, GridSize = 3, MaxCircles = 3, MoveInterval = 600;
+    private int ComboMultiplier = 1, HighScore = 0;
+    private bool GameOver, ShowLevelUp = false;
+    private DateTime LastHit = DateTime.MinValue;
+    private Random rnd = new();
+    private System.Timers.Timer gameTimer, moveTimer;
+
+    private readonly (string Color,int Points,bool IsPowerUp)[] CircleOptions = new[]
+    {
+        ("yellow",1,false), ("red",2,false), ("green",3,false),
+        ("purple",5,true), ("blue",0,true)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        gameTimer = new(1000);
+        gameTimer.Elapsed += TimerElapsed;
+
+        moveTimer = new(MoveInterval);
+        moveTimer.Elapsed += MoveCircles;
+
+        HighScore = await GetHighScoreAsync();
+        StartGame();
+    }
+
+    private void StartGame()
+    {
+        Score = 0; TimeLeft = 30; Level = 1; GridSize = 3;
+        MaxCircles = 3; MoveInterval = 600; ComboMultiplier = 1; LastHit = DateTime.MinValue;
+        GameOver = false; ActiveCircles.Clear(); HitCircles.Clear();
+        SpawnCircles(MaxCircles);
+        gameTimer.Start(); moveTimer.Interval = MoveInterval; moveTimer.Start();
+    }
+
+    private async void TimerElapsed(object sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (TimeLeft <= 0)
+        {
+            GameOver = true;
+            gameTimer.Stop(); moveTimer.Stop();
+            if (Score > HighScore) { HighScore = Score; await SetHighScoreAsync(HighScore); }
+        }
+        else
+        {
+            TimeLeft--;
+            int newLevel = (30 - TimeLeft)/10 + 1;
+            if (newLevel > Level) await LevelUp();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LevelUp()
+    {
+        Level++; ShowLevelUp = true;
+        await JS.InvokeVoidAsync("playSound","sounds/levelup.mp3");
+        StateHasChanged(); await Task.Delay(1500); ShowLevelUp = false;
+
+        GridSize = Math.Min(5, GridSize+1);
+        MaxCircles = Math.Min(GridSize*GridSize-1, MaxCircles+1);
+        MoveInterval = Math.Max(150, MoveInterval-80); moveTimer.Interval = MoveInterval;
+        SpawnCircles(MaxCircles);
+    }
+
+    private void MoveCircles(object sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (GameOver) return;
+        foreach(var circle in ActiveCircles)
+        {
+            int newPos;
+            do { newPos = rnd.Next(0, GridSize*GridSize); }
+            while (ActiveCircles.Any(c => c.Position==newPos));
+            circle.Position = newPos;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SpawnCircles(int count)
+    {
+        ActiveCircles.Clear();
+        for(int i=0;i<count;i++)
+        {
+            int pos; do { pos = rnd.Next(0,GridSize*GridSize); } while(ActiveCircles.Any(c=>c.Position==pos));
+            var option = CircleOptions[rnd.Next(CircleOptions.Length)];
+            ActiveCircles.Add(new Circle{Position=pos,Color=option.Color,Points=option.Points,IsPowerUp=option.IsPowerUp});
+        }
+    }
+
+    private async void Catch(Circle circle)
+    {
+        if (GameOver || circle==null) return;
+
+        HitCircles.Add(circle);
+        await JS.InvokeVoidAsync("playSound","sounds/hit.mp3");
+
+        for(int i=0;i<5;i++)
+        {
+            var dx=rnd.Next(-30,30); var dy=rnd.Next(-30,30);
+            Particles.Add(new Particle{X=circle.Position%GridSize,Y=circle.Position/GridSize,Dx=dx,Dy=dy});
+        }
+
+        if ((DateTime.Now-LastHit).TotalMilliseconds <1000) ComboMultiplier++;
+        else ComboMultiplier=1;
+
+        LastHit = DateTime.Now;
+
+        Score += circle.Points*ComboMultiplier;
+
+        ActiveCircles.Remove(circle);
+        if (ActiveCircles.Count<MaxCircles) SpawnCircles(MaxCircles-ActiveCircles.Count);
+
+        StateHasChanged();
+    }
+
+    private async Task<int> GetHighScoreAsync()
+    {
+        // Get the value as a string from localStorage
+        var value = await JS.InvokeAsync<string>("localStorage.getItem", "highscore");
+
+        // If null or invalid, return 0
+        if (int.TryParse(value, out int score))
+            return score;
+
+        return 0;
+    }
+
+    private async Task SetHighScoreAsync(int score)
+    {
+        await JS.InvokeVoidAsync("localStorage.setItem","highscore",score);
+    }
+}

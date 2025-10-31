@@ -1,0 +1,41 @@
+﻿@page "/movingbox"
+
+<PageTitle>Moving Box</PageTitle>
+
+
+<h3>🎯 Click the Moving Box!</h3>
+<br><br>
+<div class="game-container" @onclick="ResetBox">
+    <div class="box" style="@BoxStyle" @onclick="BoxClicked" @onclick:stopPropagation="true"></div>
+</div>
+
+<p>Score: <strong>@score</strong></p>
+
+@code {
+    private int score = 0;
+    private double top = 100;
+    private double left = 100;
+    private Random random = new();
+
+    private string BoxStyle => $"position:absolute; top:{top}px; left:{left}px; width:60px; height:60px; background:red; cursor:pointer;";
+
+    private void BoxClicked()
+    {
+        score++;
+        MoveBox();
+    }
+
+    private void ResetBox()
+    {
+        // Optional: reset score if clicking outside the box
+        score = 0;
+    }
+
+    private void MoveBox()
+    {
+        top = random.Next(50, 400);
+        left = random.Next(50, 600);
+    }
+}
+
+
