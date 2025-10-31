@@ -1,0 +1,66 @@
+﻿@page "/dxball"
+@layout MainLayout
+
+@inject IJSRuntime JS
+
+<PageTitle>DX Ball</PageTitle>
+
+<h3>🎾 DX Ball - Block Breaker</h3>
+
+<div style="margin-bottom:10px;">
+    <button class="btn btn-success me-2" @onclick="StartGame">Start</button>
+    <button class="btn btn-danger me-2" @onclick="StopGame">Stop</button>
+    <button class="btn btn-primary" @onclick="ResetGame">Reset</button>
+</div>
+
+<canvas id="dxCanvas" width="600" height="400" style="background:#000"></canvas>
+
+<p>Score: <strong>@score</strong></p>
+
+<!-- Game sounds -->
+<audio id="hitSound" src="sounds/hit.mp3"></audio>
+<audio id="blockSound" src="sounds/block.mp3"></audio>
+
+@code {
+    private int score = 0;
+
+    // We need a static reference to the instance for JSInvokable
+    private static DXBall? Instance;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Instance = this;
+            await JS.InvokeVoidAsync("dxball.setup");
+        }
+    }
+
+    private async Task StartGame()
+    {
+        await JS.InvokeVoidAsync("dxball.start");
+    }
+
+    private async Task StopGame()
+    {
+        await JS.InvokeVoidAsync("dxball.stop");
+    }
+
+    private async Task ResetGame()
+    {
+        score = 0;
+        await JS.InvokeVoidAsync("dxball.reset");
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public static Task UpdateScore(int newScore)
+    {
+        if (Instance != null)
+        {
+            Instance.score = newScore;
+            Instance.InvokeAsync(() => Instance.StateHasChanged());
+        }
+        return Task.CompletedTask;
+    }
+}
